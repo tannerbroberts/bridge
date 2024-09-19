@@ -150,6 +150,7 @@ function insert(baseString, index, input) {
 
 // Instead of directly assigning the menuLines strings, we're going to splice text over the existing whitespace using the String.splice method
 function setMainMenuBody() {
+  menuLines[MENU_OPTIONS_START_INDEX - 4] = insert(menuLines[MENU_OPTIONS_START_INDEX - 4], 8, '4 - Switch to worse UI');
   menuLines[MENU_OPTIONS_START_INDEX - 3] = insert(menuLines[MENU_OPTIONS_START_INDEX - 3], 8, `3 - View inventory (total: ${cars.length})`);
   menuLines[MENU_OPTIONS_START_INDEX - 2] = insert(menuLines[MENU_OPTIONS_START_INDEX - 2], 8, '2 - Remove vehicle');
   menuLines[MENU_OPTIONS_START_INDEX - 1] = insert(menuLines[MENU_OPTIONS_START_INDEX - 1], 8, '1 - Add vehicle');
