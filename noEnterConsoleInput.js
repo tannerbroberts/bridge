@@ -1,66 +1,166 @@
-/**
- * It turns out that there is a way to get input in the console without having to press the enter key.
- * This opens an avenue for a game to be created where the user doesn't need to press the enter key to submit their input.
-https://stackoverflow.com/questions/50/nodejs-how-to-read-keystrokes-from-stdin?rq=3
- */
-
-let mostRecentKey = '';
+let mostRecentKeyCode = '';
 process.stdin.setRawMode(true);
 process.stdin.on("data", function(charBuffer) {
-  const char = charBuffer.toString();
-  if (char === "q") {
-    process.exit();
-  }
-  mostRecentKey = char;
-  console.log('you pressed:', char);
+  // don't use toString() because it will convert the buffer to a string, which will make it impossible to detect the 'delete' key
+  const char = charBuffer[0];
+  mostRecentKeyCode = char;
 });
-const MAX_WIDTH = 50;
-const MAX_HEIGHT = 20;
 
-function printGameScreen(locationOfPlayer, lines) {
-  console.log('player location: ', locationOfPlayer);
 
-  // These curly brackets are "destructuring" the object 'locationOfPlayer' into it's two properties 'x' and 'y'.
-  // This doesn't delete locationOfPlayer, it just creates two variables for the properties 'x' and 'y' that are easier to use.
-  // If x and y were objects instead of primitive number values, then the variables x and y would be REFERENCES to the SAME objects as locationOfPlayer.x and locationOfPlayer.y.
-  // But in this case, x and y are just numbers, so changing x or y will be their own variables with no effect on locationOfPlayer.x or locationOfPlayer.y.
-  const { x, y } = locationOfPlayer;
-  lines.forEach((line, index) => {
-    if (index === y) {
-      // This line is the one the player is on, so we need to replace the character at the x position with the player character
-      console.log(line.slice(0, x) + '@' + line.slice(x + 1));
-    } else {
-      console.log(line);
+// Game state constants
+const SCREEN_WIDTH = 60;
+const SCREEN_HEIGHT = 30;
+const PLAYER_CHARACTER = '@';
+// Game state variables
+const gameScreen = Array.from({ length: SCREEN_WIDTH }, () => new Array(SCREEN_HEIGHT).fill('.'));
+let inCommandMode = false;
+let command = [];
+const playerPosition = { x: 10, y: 5 };
+
+
+function initializeGameState(playerPosition) {
+
+  // Go through each character, and set it to a dot, except for where the player character is, which is set to the player character
+  gameScreen.forEach((column, x) => {
+    column.forEach((char, y) => {
+      if (x === playerPosition.x && y === playerPosition.y) {
+        gameScreen[x][y] = PLAYER_CHARACTER;
+      } else {
+        gameScreen[x][y] = '.';
+      }
+      // Actually print the character to the screen instead of just the array
+      editScreenAt(x, y, gameScreen[x][y]);
+    });
+  });
+}
+
+
+// Use process.stdout.write to print the changed character to the right location, and only the changed character, without clearing the screen, or even the line
+// Also update the gameScreen array to reflect the change
+const editScreenAt = (x, y, char) => {
+  process.stdout.cursorTo(x, y);
+  process.stdout.write(char);
+  gameScreen[x][y] = char;
+  // Reset the cursor to the bottom of the screen to avoid the cursor blinking in the middle of the screen
+  process.stdout.cursorTo(0, SCREEN_HEIGHT);
+}
+
+
+function movePlayer(playerPosition, input) {
+  const { x: oldX, y: oldY } = playerPosition;
+  const newX = Math.max(0, Math.min(SCREEN_WIDTH - 1, oldX + (input === 'a' ? -1 : input === 'd' ? 1 : 0)));
+  const newY = Math.max(0, Math.min(SCREEN_HEIGHT - 1, oldY + (input === 'w' ? -1 : input === 's' ? 1 : 0)));
+  // Looks like the player ate the dot when replacing it with a space instead of another dot
+  editScreenAt(oldX, oldY, ' ');
+  editScreenAt(newX, newY, PLAYER_CHARACTER);
+  playerPosition.x = newX;
+  playerPosition.y = newY;
+}
+
+
+function clear() {
+    // change all dots to spaces, but leave the player character alone
+    gameScreen.forEach((column, x) => {
+      column.forEach((char, y) => {
+        if (char !== PLAYER_CHARACTER) editScreenAt(x, y, ' ');
+      });
+    });
+}
+
+
+function help(dict) {
+    process.stdout.write(`Commands: ${Object.keys(dict).join(', ')}`);
+}
+
+
+function fill() {
+  gameScreen.forEach((column, x) => {
+    column.forEach((char, y) => {
+      if (char !== PLAYER_CHARACTER) editScreenAt(x, y, '.');
+    });
+  });
+}
+
+
+const commandDictionary = {
+  clear,
+  fill,
+  help: () => help(commandDictionary),
+};
+
+
+function commandMode_start() {
+  command = [];
+  inCommandMode = true;
+  process.stdout.cursorTo(0, SCREEN_HEIGHT);
+  process.stdout.clearLine();
+  process.stdout.write('Command: ');
+}
+
+
+function commandMode_append(inputCharacter) {
+  command.push(inputCharacter);
+  process.stdout.write(inputCharacter);
+}
+
+
+function commandMode_backspace() {
+  process.stdout.cursorTo(0, SCREEN_HEIGHT);
+  process.stdout.clearLine();
+  command.pop();
+  process.stdout.write('Command: ' + command.join(''));
+}
+
+
+function commandMode_enter(command) {
+  // Clear the 'Command: comand' line from sdout
+  process.stdout.cursorTo(0, SCREEN_HEIGHT);
+  process.stdout.clearLine();
+  if (command.length) {
+    if (commandDictionary[command]) commandDictionary[command]();
+    else process.stdout.write('Invalid command: ' + command);
+  }
+  inCommandMode = false;
+}
+
+
+function gameTick() {
+  // Only do stuff if the player has pressed a key
+  // later, we'll do stuff besides that with NPC's and stuff
+    if (mostRecentKeyCode !== '') {
+      const input = mostRecentKeyCode; // Coded as a small integer, not a character
+      const char = String.fromCharCode(input); // Converted to a character
+      if (inCommandMode) {
+        if (input === 127) commandMode_backspace();
+        else if (input === 13) commandMode_enter(command.join(''));
+        else commandMode_append(char);
+      }
+      else {
+        switch(char) {
+          case 'q':
+            console.clear();
+            process.exit();
+            break;
+          case 'w':
+          case 'a':
+          case 's':
+          case 'd':
+            movePlayer(playerPosition, char);
+            break;
+          case 'e':
+            commandMode_start();
+            break;
+          default: // Do nothing for now.. we'll animage npcs and stuff later
+        }
+      }
+      mostRecentKeyCode = '';
     }
-  })
 }
 
-function updatePlayerLocation(playerLocation, input) {
-  switch(input) {
-    case 'w': playerLocation.y = Math.max(0, Math.min(MAX_WIDTH, playerLocation.y - 1)); break;
-    case 'a': playerLocation.x = Math.max(0, Math.min(MAX_WIDTH, playerLocation.x - 1)); break;
-    case 's': playerLocation.y = Math.max(0, Math.min(MAX_WIDTH, playerLocation.y + 1)); break;
-    case 'd': playerLocation.x = Math.max(0, Math.min(MAX_WIDTH, playerLocation.x + 1)); break;
-    default: console.log('use w, a, s, d to move, q to quit, and dont run into walls...its a bad idea');
-  }
-}
 
-const playerLocation = { x: 0, y: 0 };
-const gameScreenLines = [];
-for (let i = 0; i < MAX_HEIGHT; i++) gameScreenLines.push(new Array(MAX_WIDTH).join('.'));
-function takeGameStep() {
-
-  // This if statement is checking for any key presses that have been made since the last frame
-  if (mostRecentKey !== '') {
-    const input = mostRecentKey;
-    mostRecentKey = '';
-    updatePlayerLocation(playerLocation, input, gameScreenLines);
-    // Clear the console in preperation for the next frame
-    console.clear();
-    printGameScreen(playerLocation, gameScreenLines);
-  }
-}
-
+// Program entry point
 console.clear();
-printGameScreen(playerLocation, gameScreenLines);
-setInterval(takeGameStep, 1000 / 60); // 60 frames per second, do this
+initializeGameState(playerPosition);
+// We can't use while loops here because they block the ability to listen for key presses
+// Instead, we run this function 60 times per second, allowing plenty of time for key presses in between
+setInterval(gameTick, 1000 / 60); // 60 frames per second
