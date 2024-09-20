@@ -88,7 +88,7 @@ const MENU_MODES = {
 
 // This screen object is used to keep track of what should be showing on the screen at any given time.
 let menuLines = [];
-let screen = { 
+let screen = {
   mode: MENU_MODES.MAIN,
   addVehicleState: {
     make: null,
